@@ -1,13 +1,21 @@
-# GoNest
-Server implementation for a simple Arduino nest workalike
+# ernest-server
+### Control & data server for the Ernest system
 
-[Client Implementation](https://github.com/rschlaikjer/ArNest)
+[Master Project Repo](https://github.com/rschlaikjer/Ernest)
 
 ## What is this
-This server is the brains behind the simple nest-like thermostat that I built
-for my apartment. On a basic level it simply gets temperature and pressure data
-as GET requests from the arduino, and responds with whether the arduino should
-turn the heater on or not.
+This server listens for HTTP requests from the Ernest master and logs the
+environmental data that it gets to the database. It also provides the logic for
+whether or not the master node should activate the furnace.
+
+This server is very similar to the
+[GoNest](https://github.com/rschlaikjer/GoNest) server, which was part of the
+[ArNest](https://github.com/rschlaikjer/ArNest) project that preceded Ernest.
+The major difference between the two is that this server can deal with having
+multuiple nodes worth of data sent in. The user can specify which node ID should
+be used for temperature data when deciding whether to turn on the furnace. **This
+needs to be defined in the settings table, or the server will never update the
+furnace state.**
 
 ## Fancy features
 ### Presence detection using DHCP
