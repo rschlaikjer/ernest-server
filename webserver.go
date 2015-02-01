@@ -132,9 +132,9 @@ func (t *WebServer) StatusPage(w http.ResponseWriter, r *http.Request) {
 	r.ParseForm()
 
 	if r.Form.Get("override") == "on" {
-		t.decider.setIntSetting("override", time.Now().Unix())
+		t.decider.setIntSetting(SETTING_OVERRIDE, time.Now().Unix())
 		http.Redirect(w, r, "/", 301)
-	} else if r.Form.Get("override") == "off" {
+	} else if r.Form.Get(SETTING_OVERRIDE) == "off" {
 		t.decider.setIntSetting("override", 0)
 		http.Redirect(w, r, "/", 301)
 	}

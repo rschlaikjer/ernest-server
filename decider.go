@@ -7,6 +7,12 @@ import (
 	"time"
 )
 
+const SETTING_IDLE_TEMP = "idle_temp"
+const SETTING_ACTIVE_TEMP = "min_temp"
+const SETTING_OVERRIDE = "override"
+const SETTING_FURNACE_ON = "furnace_on"
+const SETTING_PRIMARY_NODE = "primary_node"
+
 type Decider struct {
 	db          *sql.DB
 	dhcp_tailer *DhcpStatus
@@ -73,7 +79,7 @@ func (d *Decider) setIntSetting(name string, value int64) error {
 
 func (d *Decider) getIdleTemp() float64 {
 	// Grab the temperature to keep the house at when unoccupied
-	temp, err := d.getFloatSetting("idle_temp")
+	temp, err := d.getFloatSetting(SETTING_IDLE_TEMP)
 	if err != nil {
 		log.Println(err)
 		return 12.50
@@ -83,7 +89,7 @@ func (d *Decider) getIdleTemp() float64 {
 
 func (d *Decider) getActiveTemp() float64 {
 	// Get the temperature to keep the house at when occupied
-	temp, err := d.getFloatSetting("min_temp")
+	temp, err := d.getFloatSetting(SETTING_ACTIVE_TEMP)
 	if err != nil {
 		log.Println(err)
 		return 15.50
@@ -93,7 +99,7 @@ func (d *Decider) getActiveTemp() float64 {
 
 func (d *Decider) getOverride() bool {
 	// Return whether the furnace override is on
-	override, err := d.getIntSetting("override")
+	override, err := d.getIntSetting(SETTING_OVERRIDE)
 	if err != nil {
 		log.Println(err)
 		return false
@@ -118,7 +124,7 @@ func (d *Decider) anybodyHome() bool {
 func (d *Decider) getLastFurnaceState() bool {
 	// Return the state the furnace was in last time.
 	// True = on, false = off
-	state, err := d.getBoolSetting("furnace_on")
+	state, err := d.getBoolSetting(SETTING_FURNACE_ON)
 	if err != nil {
 		return false
 	}
