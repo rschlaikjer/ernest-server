@@ -138,11 +138,13 @@ func (d *Decider) getLastTemperature() float64 {
 	return temp
 }
 
-type HistData struct {
-	Time      int64
-	Temp      float64
-	Pressure  float64
-	Residents int64
+type ReadingHistory map[int64][]*ReadingData
+
+type ReadingData struct {
+	Time     int64
+	Temp     sql.NullFloat64
+	Pressure sql.NullFloat64
+	Humidity sql.NullFloat64
 }
 
 type PeopleHistData struct {
@@ -150,9 +152,33 @@ type PeopleHistData struct {
 	Count int64
 }
 
-func (d *Decider) getHistory() []*HistData {
+func (d *Decider) getReadingHistory() ReadingHistory {
+	// Get all the node IDs that have reported data in the past week
+	node_id_rows, err := d.db.Query(`SELECT  node_id
+		FROM  readings
+		WHERE  timestamp > DATE_SUB( CURRENT_TIMESTAMP( ) , INTERVAL 1 WEEK )
+		GROUP BY  node_id `)
+	if err != nil {
+		log.Println(err)
+		return nil
+	}
+	defer node_id_rows.Close()
+	history := make(ReadingHistory)
+	for node_id_rows.Next() {
+		var node_id int64
+		if err := node_id_rows.Scan(&node_id); err != nil {
+			log.Println(err)
+			continue
+		}
+		history[node_id] = d.getReadingHistoryForNode(node_id)
+	}
+
+	return history
+}
+
+func (d *Decider) getReadingHistoryForNode(node_id int64) []*ReadingData {
 	rows, err := d.db.Query(`
-		SELECT timestamp, temp, pressure, inhabited FROM nest.history WHERE
+		SELECT timestamp, temp, pressure, humidity FROM nest.history WHERE
 		timestamp > DATE_SUB(CURRENT_TIMESTAMP(), INTERVAL 1 WEEK)
 		AND id % 5 = 0
 		ORDER BY timestamp ASC
@@ -163,15 +189,15 @@ func (d *Decider) getHistory() []*HistData {
 	}
 	defer rows.Close()
 
-	history := make([]*HistData, 0)
+	history := make([]*ReadingData, 0)
 	for rows.Next() {
-		h := new(HistData)
+		h := new(ReadingData)
 		var timestamp time.Time
 		if err := rows.Scan(
 			&timestamp,
 			&h.Temp,
 			&h.Pressure,
-			&h.Residents,
+			&h.Humidity,
 		); err != nil {
 			continue
 		}
@@ -209,26 +235,30 @@ func (d *Decider) getPeopleHistory() []*PeopleHistData {
 
 }
 
-func (d *Decider) LogStats(current_temp, current_pressure float64, furnace_on bool) {
-	_, err := d.db.Exec(`INSERT INTO  nest.history
-		(id, timestamp, temp, pressure, heater, inhabited)
+func (d *Decider) LogReading(node_id int64, current_temp, current_pressure, current_humidity sql.NullFloat64) {
+	_, err := d.db.Exec(`INSERT INTO  nest.readings
+		(id, timestamp, node_id, temp, pressure, humidity)
 		VALUES
 		(NULL, CURRENT_TIMESTAMP, ?, ?, ?, ?)`,
-		current_temp, current_pressure, furnace_on, d.anybodyHome())
+		current_temp, current_pressure, current_humidity)
 	if err != nil {
 		log.Println(err)
 	}
+	/*
+		err = d.setBoolSetting(SETTING_FURNACE_ON, furnace_on)
+		if err != nil {
+			log.Println(err)
+		}
 
-	err = d.setBoolSetting("furnace_on", furnace_on)
-	if err != nil {
-		log.Println(err)
-	}
+	*/
+}
 
+func (d *Decider) LogPeople() {
 	for _, housemate := range d.dhcp_tailer.housemates {
 		_, err := d.db.Exec(`INSERT INTO  nest.people_history
-			(timestamp, person, is_home)
-			VALUES
-			(CURRENT_TIMESTAMP, ?, ?)`,
+				(timestamp, person, is_home)
+				VALUES
+				(CURRENT_TIMESTAMP, ?, ?)`,
 			housemate.Id, housemate.isHome(),
 		)
 		if err != nil {

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"fmt"
 	"html/template"
 	"log"
@@ -25,7 +26,7 @@ func NewWebServer(c *Config, dhcp *DhcpStatus, decider *Decider) *WebServer {
 	t.config = c
 	t.server_started = time.Now().Round(time.Second)
 	t.servlets = make(map[string]func(http.ResponseWriter, *http.Request))
-	t.servlets["/nest.php"] = t.ControlPage
+	t.servlets["/control"] = t.ControlPage
 	return t
 }
 
@@ -50,7 +51,7 @@ type StatusInfo struct {
 	OverrideState  string
 	HouseOccupied  string
 	People         []*Housemate
-	History        []*HistData
+	History        ReadingHistory
 	Farenheit      bool
 	PeopleHistory  []*PeopleHistData
 	ShowGraph      bool
@@ -108,7 +109,7 @@ func (t *WebServer) GetStatusInfo(r *http.Request) *StatusInfo {
 
 	if r.Form.Get("graph") == "on" {
 		template_data.ShowGraph = true
-		template_data.History = t.decider.getHistory()
+		template_data.History = t.decider.getReadingHistory()
 		template_data.PeopleHistory = t.decider.getPeopleHistory()
 	} else {
 		template_data.ShowGraph = false
@@ -116,8 +117,12 @@ func (t *WebServer) GetStatusInfo(r *http.Request) *StatusInfo {
 
 	if r.Form.Get("unit") == "f" {
 		template_data.Farenheit = true
-		for _, v := range template_data.History {
-			v.Temp = v.Temp*1.8 + 32.0
+		for _, node_history := range template_data.History {
+			for _, v := range node_history {
+				if v.Temp.Valid {
+					v.Temp.Float64 = v.Temp.Float64*1.8 + 32.0
+				}
+			}
 		}
 	} else {
 		template_data.Farenheit = false
@@ -159,29 +164,64 @@ func (t *WebServer) StatusPage(w http.ResponseWriter, r *http.Request) {
 
 func (t *WebServer) ControlPage(w http.ResponseWriter, r *http.Request) {
 	r.ParseForm()
+	var current_temp sql.NullFloat64
+	var current_pressure sql.NullFloat64
+	var current_humidity sql.NullFloat64
+	var err error
+
+	node_id_s := r.Form.Get("node_id")
+	node_id, err := strconv.ParseInt(node_id_s, 10, 64)
+	if err != nil {
+		log.Println(err)
+		fmt.Fprintf(w, "burn-n")
+		return
+	}
+
+	// Read the weather data from the form into nullable floats
+	// If there was an error parsing the value, assume it was because it wasn't
+	// present, and just mark the nullable as not valid.
 	current_temp_s := r.Form.Get("temp")
-	current_temp, err := strconv.ParseFloat(current_temp_s, 64)
+	current_temp.Float64, err = strconv.ParseFloat(current_temp_s, 64)
 	if err != nil {
-		log.Println(err)
-		fmt.Fprintf(w, "burn-n")
-		return
+		current_temp.Valid = false
 	}
-
 	current_pressure_s := r.Form.Get("pressure")
-	current_pressure, err := strconv.ParseFloat(current_pressure_s, 64)
+	current_pressure.Float64, err = strconv.ParseFloat(current_pressure_s, 64)
 	if err != nil {
-		log.Println(err)
+		current_pressure.Valid = false
+	}
+	current_humidity_s := r.Form.Get("humidity")
+	current_humidity.Float64, err = strconv.ParseFloat(current_humidity_s, 64)
+	if err != nil {
+		current_humidity.Valid = false
+	}
+
+	// If none of the readings made sense, there's no point saving any of them.
+	if !current_temp.Valid && !current_pressure.Valid && !current_humidity.Valid {
+		log.Println("Got useless info from node", node_id)
 		fmt.Fprintf(w, "burn-n")
 		return
 	}
 
-	furnace_on := t.decider.ShouldFurnace(current_temp)
+	// Grab the primary node (the node we use to control the heater)
+	primary_node, err := t.decider.getIntSetting(SETTING_PRIMARY_NODE)
+	if err != nil {
+		log.Println(err)
+		fmt.Fprintf(w, "burn-i")
+		return
+	}
 
-	t.decider.LogStats(current_temp, current_pressure, furnace_on)
-
-	if furnace_on {
-		fmt.Fprintf(w, "burn-y")
+	// If this reading was from the primary, update the heater. Otherwise,
+	// no change.
+	if node_id == primary_node && current_temp.Valid {
+		furnace_on := t.decider.ShouldFurnace(current_temp.Float64)
+		t.decider.LogReading(node_id, current_temp, current_pressure, current_humidity)
+		if furnace_on {
+			fmt.Fprintf(w, "burn-y")
+		} else {
+			fmt.Fprintf(w, "burn-n")
+		}
 	} else {
-		fmt.Fprintf(w, "burn-n")
+		fmt.Fprintf(w, "burn-i")
 	}
 }
