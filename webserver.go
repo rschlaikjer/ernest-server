@@ -111,21 +111,20 @@ func (t *WebServer) GetStatusInfo(r *http.Request) *StatusInfo {
 		template_data.ShowGraph = true
 		template_data.History = t.decider.getReadingHistory()
 		template_data.PeopleHistory = t.decider.getPeopleHistory()
-	} else {
-		template_data.ShowGraph = false
-	}
-
-	if r.Form.Get("unit") == "f" {
-		template_data.Farenheit = true
-		for _, node_history := range template_data.History {
-			for _, v := range node_history {
-				if v.Temp.Valid {
-					v.Temp.Float64 = v.Temp.Float64*1.8 + 32.0
+		if r.Form.Get("unit") == "f" {
+			template_data.Farenheit = true
+			for _, node_history := range template_data.History {
+				for _, v := range node_history {
+					if v.Temp.Valid {
+						v.Temp.Float64 = v.Temp.Float64*1.8 + 32.0
+					}
 				}
 			}
+		} else {
+			template_data.Farenheit = false
 		}
 	} else {
-		template_data.Farenheit = false
+		template_data.ShowGraph = false
 	}
 
 	template_data.Override = t.decider.getOverride()
@@ -167,6 +166,10 @@ func (t *WebServer) ControlPage(w http.ResponseWriter, r *http.Request) {
 	var current_temp sql.NullFloat64
 	var current_pressure sql.NullFloat64
 	var current_humidity sql.NullFloat64
+	current_temp.Valid = true
+	current_pressure.Valid = true
+	current_humidity.Valid = true
+
 	var err error
 
 	node_id_s := r.Form.Get("node_id")
@@ -211,11 +214,13 @@ func (t *WebServer) ControlPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Log the data
+	t.decider.LogReading(node_id, current_temp, current_pressure, current_humidity)
+
 	// If this reading was from the primary, update the heater. Otherwise,
 	// no change.
 	if node_id == primary_node && current_temp.Valid {
 		furnace_on := t.decider.ShouldFurnace(current_temp.Float64)
-		t.decider.LogReading(node_id, current_temp, current_pressure, current_humidity)
 		if furnace_on {
 			fmt.Fprintf(w, "burn-y")
 		} else {

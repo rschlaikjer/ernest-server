@@ -132,7 +132,12 @@ func (d *Decider) getLastFurnaceState() bool {
 }
 
 func (d *Decider) getLastTemperature() float64 {
-	row := d.db.QueryRow("SELECT temp  FROM `history` ORDER BY `timestamp` DESC LIMIT 1")
+	row := d.db.QueryRow(`
+		SELECT readings.temp FROM readings, settings
+		WHERE readings.node_id = settings.value
+		AND settings.key = "primary_node"
+		ORDER BY timestamp DESC LIMIT 1
+	`)
 	var temp float64
 	row.Scan(&temp)
 	return temp
@@ -178,11 +183,12 @@ func (d *Decider) getReadingHistory() ReadingHistory {
 
 func (d *Decider) getReadingHistoryForNode(node_id int64) []*ReadingData {
 	rows, err := d.db.Query(`
-		SELECT timestamp, temp, pressure, humidity FROM nest.history WHERE
+		SELECT timestamp, temp, pressure, humidity FROM nest.readings WHERE
 		timestamp > DATE_SUB(CURRENT_TIMESTAMP(), INTERVAL 1 WEEK)
 		AND id % 5 = 0
+		AND node_id = ?
 		ORDER BY timestamp ASC
-	`)
+	`, node_id)
 	if err != nil {
 		log.Println(err)
 		return nil
@@ -240,7 +246,7 @@ func (d *Decider) LogReading(node_id int64, current_temp, current_pressure, curr
 		(id, timestamp, node_id, temp, pressure, humidity)
 		VALUES
 		(NULL, CURRENT_TIMESTAMP, ?, ?, ?, ?)`,
-		current_temp, current_pressure, current_humidity)
+		node_id, current_temp, current_pressure, current_humidity)
 	if err != nil {
 		log.Println(err)
 	}
