@@ -27,6 +27,7 @@ func NewWebServer(c *Config, dhcp *DhcpStatus, decider *Decider) *WebServer {
 	t.server_started = time.Now().Round(time.Second)
 	t.servlets = make(map[string]func(http.ResponseWriter, *http.Request))
 	t.servlets["/control"] = t.ControlPage
+	t.servlets["/graph"] = http.FileServer(http.Dir("/var/www/nest")).ServeHTTP
 	return t
 }
 
@@ -41,22 +42,23 @@ func (t *WebServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 type StatusInfo struct {
-	FurnaceState   string
-	CurrentTempC   string
-	CurrentTempF   string
-	MinActiveTempC string
-	MinActiveTempF string
-	MinIdleTempC   string
-	MinIdleTempF   string
-	OverrideState  string
-	HouseOccupied  string
-	People         []*Housemate
-	History        ReadingHistory
-	Farenheit      bool
-	PeopleHistory  []*PeopleHistData
-	ShowGraph      bool
-	Override       bool
-	Uptime         time.Duration
+	FurnaceState       string
+	CurrentTempC       string
+	CurrentTempF       string
+	MinActiveTempC     string
+	MinActiveTempF     string
+	MinIdleTempC       string
+	MinIdleTempF       string
+	OverrideState      string
+	HouseOccupied      string
+	People             []*Housemate
+	History            []*ReadingData
+	ReadingHistoryText string
+	Farenheit          bool
+	PeopleHistory      []*PeopleHistData
+	ShowGraph          bool
+	Override           bool
+	Uptime             time.Duration
 }
 
 func (t *WebServer) GetStatusInfo(r *http.Request) *StatusInfo {
@@ -109,19 +111,25 @@ func (t *WebServer) GetStatusInfo(r *http.Request) *StatusInfo {
 
 	if r.Form.Get("graph") == "on" {
 		template_data.ShowGraph = true
-		template_data.History = t.decider.getReadingHistory()
+		template_data.History = t.decider.getReadingHistoryForNode(255)
 		template_data.PeopleHistory = t.decider.getPeopleHistory()
 		if r.Form.Get("unit") == "f" {
 			template_data.Farenheit = true
-			for _, node_history := range template_data.History {
-				for _, v := range node_history {
-					if v.Temp.Valid {
-						v.Temp.Float64 = v.Temp.Float64*1.8 + 32.0
-					}
+			for _, v := range template_data.History {
+				if v.Temp.Valid {
+					v.Temp.Float64 = v.Temp.Float64*1.8 + 32.0
 				}
 			}
 		} else {
 			template_data.Farenheit = false
+		}
+		err := generateTempPlot(
+			t.decider,
+			template_data.Farenheit,
+			"/var/www/nest/graph.png",
+		)
+		if err != nil {
+			log.Println(err)
 		}
 	} else {
 		template_data.ShowGraph = false
@@ -221,6 +229,10 @@ func (t *WebServer) ControlPage(w http.ResponseWriter, r *http.Request) {
 	// no change.
 	if node_id == primary_node && current_temp.Valid {
 		furnace_on := t.decider.ShouldFurnace(current_temp.Float64)
+		err = t.decider.setBoolSetting(SETTING_FURNACE_ON, furnace_on)
+		if err != nil {
+			log.Println(err)
+		}
 		if furnace_on {
 			fmt.Fprintf(w, "burn-y")
 		} else {

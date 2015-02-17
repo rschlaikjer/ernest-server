@@ -6,7 +6,7 @@
     </head>
     <body>
         <h1>80B 'Nest'</h1>
-        <meta http-equiv="refresh" content="300">
+        <meta http-equiv="refresh" content="60">
         <pre>
 <strong>Current Status</strong>
     Uptime:         {{.Uptime}}
@@ -42,58 +42,9 @@
     {{end}}{{end}}
 </pre>
         {{ if .ShowGraph }}
-        <script type="text/javascript" src="https://www.google.com/jsapi?autoload={'modules':[{'name':'visualization','version':'1','packages':['annotationchart']}]}"></script>
         <center>
-            <div style="width: 1200px; height: 650px;" id="chart_div" style="width: 1000px; height: 1000px;"></div>
+        <img align="center" src="http://nest.rhye.org/graph.png">
         </center>
-        <script type='text/javascript'>
-google.load('visualization', '1', {'packages':['annotationchart']});
-google.setOnLoadCallback(drawChart);
-
-function drawChart() {
-
-    // Create and populate the data table.
-    var data = new google.visualization.DataTable();
-    data.addColumn('date', 'Date');
-    {{ if .Farenheit }}
-    data.addColumn('number', 'Temperature (°F)');
-    {{ else }}
-    data.addColumn('number', 'Temperature (°C)');
-    {{ end }}
-    data.addColumn('number', 'Pressure (mBar)');
-    data.addColumn('number', 'People Home');
-    {{ range .History }}
-        data.addRow([new Date({{.Time}}*1000), {{.Temp}}, {{.Pressure}}, undefined]);
-    {{end}}
-    {{ range .PeopleHistory }}
-        data.addRow([new Date({{.Time}}*1000), undefined, undefined, {{.Count}}]);
-    {{end}}
-    // Create and draw the visualization.
-    chart = new google.visualization.AnnotationChart(document.getElementById('chart_div'))
-        chart.draw(
-                data,
-                {
-                    scaleColumns: [0, 1, 2],
-                    displayAnnotations: true,
-                    curveType: "function",
-                    chart: {
-                        interpolateNulls: true,
-                    },
-                    vAxes: {
-                        0: {logScale: false, title: "Temperature"},
-                        1: {logScale: false, title: "Pressure"},
-                        2: {logScale: false, title: "People"}
-                    },
-                    series:{
-                        0:{targetAxisIndex:0},
-                        1:{targetAxisIndex:1},
-                        2:{targetAxisIndex:2}
-                    }
-                }
-                );
-}
-
-        </script>
         {{end}}
 
     </body>

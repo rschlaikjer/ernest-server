@@ -2,8 +2,10 @@ package main
 
 import (
 	"database/sql"
+	"fmt"
 	_ "github.com/go-sql-driver/mysql"
 	"log"
+	"math/rand"
 	"time"
 )
 
@@ -143,6 +145,34 @@ func (d *Decider) getLastTemperature() float64 {
 	return temp
 }
 
+type NodePlotOpts struct {
+	Name    string
+	Graph_r uint8
+	Graph_g uint8
+	Graph_b uint8
+}
+
+func (d *Decider) getNodePlotOpts(node_id int64) *NodePlotOpts {
+	opts := new(NodePlotOpts)
+
+	row := d.db.QueryRow("SELECT name,graph_r,graph_g,graph_b from node_names WHERE node_id = ?", node_id)
+	err := row.Scan(
+		&opts.Name,
+		&opts.Graph_r,
+		&opts.Graph_g,
+		&opts.Graph_b,
+	)
+
+	if err != nil {
+		opts.Name = fmt.Sprintf("Node %d", node_id)
+		opts.Graph_r = uint8(rand.Int31() % 255)
+		opts.Graph_g = uint8(rand.Int31() % 255)
+		opts.Graph_b = uint8(rand.Int31() % 255)
+	}
+
+	return opts
+}
+
 type ReadingHistory map[int64][]*ReadingData
 
 type ReadingData struct {
@@ -250,13 +280,7 @@ func (d *Decider) LogReading(node_id int64, current_temp, current_pressure, curr
 	if err != nil {
 		log.Println(err)
 	}
-	/*
-		err = d.setBoolSetting(SETTING_FURNACE_ON, furnace_on)
-		if err != nil {
-			log.Println(err)
-		}
 
-	*/
 }
 
 func (d *Decider) LogPeople() {
