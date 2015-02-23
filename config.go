@@ -26,6 +26,11 @@ type Config struct {
 	Templates struct {
 		Status string
 	}
+
+	Mail struct {
+		Host   string
+		Target string
+	}
 }
 
 func (kc Config) GetSqlURI() string {

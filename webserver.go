@@ -6,6 +6,7 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+	"net/smtp"
 	"strconv"
 	"strings"
 	"time"
@@ -17,6 +18,7 @@ type WebServer struct {
 	dhcp_tailer    *DhcpStatus
 	server_started time.Time
 	servlets       map[string]func(http.ResponseWriter, *http.Request)
+	last_update    time.Time
 }
 
 func NewWebServer(c *Config, dhcp *DhcpStatus, decider *Decider) *WebServer {
@@ -28,7 +30,62 @@ func NewWebServer(c *Config, dhcp *DhcpStatus, decider *Decider) *WebServer {
 	t.servlets = make(map[string]func(http.ResponseWriter, *http.Request))
 	t.servlets["/control"] = t.ControlPage
 	t.servlets["/graph"] = http.FileServer(http.Dir("/var/www/nest")).ServeHTTP
+	t.last_update = time.Now()
+	go t.disconnectWatchdog()
 	return t
+}
+
+// Watchdog that sends us an email if the base station fails to update within
+// a given amount of time
+func (t *WebServer) disconnectWatchdog() {
+	for {
+		time.Sleep(1 * time.Minute)
+		if time.Now().Sub(t.last_update) > time.Minute*5 {
+			// Send a warning email
+			// Connect to the remote SMTP server.
+			conn, err := smtp.Dial(t.config.Mail.Host)
+			if err != nil {
+				log.Println(err)
+				continue
+			}
+
+			// Set the sender and recipient first
+			if err := conn.Mail("ernest"); err != nil {
+				log.Println(err)
+				continue
+			}
+			if err := conn.Rcpt(t.config.Mail.Target); err != nil {
+				log.Println(err)
+				continue
+			}
+
+			// Send the email body.
+			wc, err := conn.Data()
+			if err != nil {
+				log.Println(err)
+				continue
+			}
+			_, err = fmt.Fprintf(wc, `Subject: No data warning for Ernest
+Just a heads up, but there have been no communications from the Ernest base station
+within the past 5 minutes.`)
+			if err != nil {
+				log.Println(err)
+				continue
+			}
+			err = wc.Close()
+			if err != nil {
+				log.Println(err)
+				continue
+			}
+
+			// Send the QUIT command and close the connection.
+			err = conn.Quit()
+			if err != nil {
+				log.Println(err)
+				continue
+			}
+		}
+	}
 }
 
 func (t *WebServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -170,6 +227,7 @@ func (t *WebServer) StatusPage(w http.ResponseWriter, r *http.Request) {
 }
 
 func (t *WebServer) ControlPage(w http.ResponseWriter, r *http.Request) {
+	t.last_update = time.Now()
 	r.ParseForm()
 	var current_temp sql.NullFloat64
 	var current_pressure sql.NullFloat64
