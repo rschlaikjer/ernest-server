@@ -176,15 +176,53 @@ func (d *Decider) getNodePlotOpts(node_id int64) *NodePlotOpts {
 type ReadingHistory map[int64][]*ReadingData
 
 type ReadingData struct {
-	Time     int64
-	Temp     sql.NullFloat64
-	Pressure sql.NullFloat64
-	Humidity sql.NullFloat64
+	Time      time.Time
+	Staleness time.Duration
+	Node      int64
+	Name      string
+	Temp      sql.NullFloat64
+	Pressure  sql.NullFloat64
+	Humidity  sql.NullFloat64
 }
 
 type PeopleHistData struct {
 	Time  int64
 	Count int64
+}
+
+func (d *Decider) getRecentReadings() []*ReadingData {
+	rows, err := d.db.Query(`
+	SELECT a.timestamp, a.node_id, a.temp, a.pressure, a.humidity
+	FROM readings a INNER JOIN (SELECT node_id, max(id) AS maxid
+	FROM readings group by node_id) AS b
+	ON a.id = b.maxid
+	WHERE a.timestamp > DATE_SUB(CURRENT_TIMESTAMP, INTERVAL 5 MINUTE)
+	`)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	r := make([]*ReadingData, 0)
+
+	for rows.Next() {
+		reading := new(ReadingData)
+		if err := rows.Scan(
+			&reading.Time,
+			&reading.Node,
+			&reading.Temp,
+			&reading.Pressure,
+			&reading.Humidity,
+		); err != nil {
+			continue
+		}
+		node_info := d.getNodePlotOpts(reading.Node)
+		reading.Name = node_info.Name
+		reading.Staleness = time.Now().Round(time.Second).Sub(
+			reading.Time.Round(time.Second),
+		) - (time.Hour * 5)
+		r = append(r, reading)
+	}
+	return r
 }
 
 func (d *Decider) getReadingHistory() ReadingHistory {
@@ -228,16 +266,15 @@ func (d *Decider) getReadingHistoryForNode(node_id int64) []*ReadingData {
 	history := make([]*ReadingData, 0)
 	for rows.Next() {
 		h := new(ReadingData)
-		var timestamp time.Time
 		if err := rows.Scan(
-			&timestamp,
+			&h.Time,
 			&h.Temp,
 			&h.Pressure,
 			&h.Humidity,
 		); err != nil {
 			continue
 		}
-		h.Time = timestamp.Unix()
+		h.Node = node_id
 		history = append(history, h)
 	}
 	return history

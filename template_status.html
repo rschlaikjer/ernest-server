@@ -15,6 +15,31 @@
     Current Temp:   {{.CurrentTempC}} °C
                     {{.CurrentTempF}} °F
 
+<strong>All Nodes</strong><table border="0" cellpadding="2">
+<thead>
+    <tr>
+        <td>    </td>
+        <td><strong>Node</strong></td>
+        <td><strong>Temp (°C)</strong></td>
+        <td><strong>Pressure (mBar)</strong></td>
+        <td><strong>Humidity (%)</strong></td>
+        <td><strong>Staleness</strong></td>
+    </tr>
+</thead>
+<tbody>
+{{range .RecentReadings}}
+<tr>
+    <td>    </td>
+    <td>{{.Name}}</td>
+    <td>{{if .Temp.Valid}} {{ .Temp.Float64 }} {{else}} -- {{end}}</td>
+    <td>{{if .Pressure.Valid}} {{.Pressure.Float64}} {{else}} -- {{end}}</td>
+    <td>{{if .Humidity.Valid}} {{.Humidity.Float64}} {{else}} -- {{end}}</td>
+    <td>{{.Staleness.String}}</td>
+</tr>
+{{end}}
+</tbody>
+</table>
+
 <strong>People Home?</strong><table border="0">
 {{range .People}}<tr><td>    </td><td>{{.Name}}</td><td>{{.IsHome}}</td><td>(Last seen {{.SeenDuration.String}} ago)</td></tr>
 {{end}}</table>

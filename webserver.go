@@ -116,6 +116,7 @@ type StatusInfo struct {
 	ShowGraph          bool
 	Override           bool
 	Uptime             time.Duration
+	RecentReadings     []*ReadingData
 }
 
 func (t *WebServer) GetStatusInfo(r *http.Request) *StatusInfo {
@@ -193,6 +194,8 @@ func (t *WebServer) GetStatusInfo(r *http.Request) *StatusInfo {
 	}
 
 	template_data.Override = t.decider.getOverride()
+
+	template_data.RecentReadings = t.decider.getRecentReadings()
 
 	return template_data
 }

@@ -69,7 +69,7 @@ func dateTicks(min, max float64) []plot.Tick {
 func tempDataSeries(node_data []*ReadingData, f bool) plotter.XYs {
 	pts := make(plotter.XYs, len(node_data))
 	for i, reading := range node_data {
-		pts[i].X = float64(reading.Time)
+		pts[i].X = float64(reading.Time.Unix())
 		pts[i].Y = reading.Temp.Float64
 		if f {
 			pts[i].Y = pts[i].Y*(9.0/5.0) + 32
