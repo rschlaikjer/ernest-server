@@ -184,7 +184,21 @@ func (t *WebServer) GetStatusInfo(r *http.Request) *StatusInfo {
 		err := generateTempPlot(
 			t.decider,
 			template_data.Farenheit,
-			"/var/www/nest/graph.png",
+			"/var/www/nest/graph_temp.png",
+		)
+		if err != nil {
+			log.Println(err)
+		}
+		err = generatePressurePlot(
+			t.decider,
+			"/var/www/nest/graph_pressure.png",
+		)
+		if err != nil {
+			log.Println(err)
+		}
+		err = generateHumidityPlot(
+			t.decider,
+			"/var/www/nest/graph_humidity.png",
 		)
 		if err != nil {
 			log.Println(err)
