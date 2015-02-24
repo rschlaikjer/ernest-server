@@ -94,7 +94,7 @@ func (d *Decider) getActiveTemp() float64 {
 	temp, err := d.getFloatSetting(SETTING_ACTIVE_TEMP)
 	if err != nil {
 		log.Println(err)
-		return 15.50
+		return 16
 	}
 	return temp
 }
